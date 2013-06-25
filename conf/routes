@@ -1,0 +1,19 @@
+# Routes
+# This file defines all application routes (Higher priority routes first)
+# ~~~~
+
+# Home page
+GET    /                                                            controllers.Application.index
+
+# Map static resources from the /public folder to the /assets URL path
+GET    /assets/*file                                                controllers.Assets.at(path="/public", file)
+
+GET    /connect4/ping                                               @controllers.Connect4.ping
+
+GET    /connect4/game/create                                        @controllers.Connect4.createGame
+
+POST   /connect4/game/:gameId/register                              @controllers.Connect4.register(gameId: Int)
+
+GET    /connect4/game/:gameId/player/:playerId/status               @controllers.Connect4.status(gameId: Int, playerId: String)
+
+POST   /connect4/game/:gameId/player/:playerId/placepiece/:column   @controllers.Connect4.move(gameId: Int, playerId: String, column: Int)
