@@ -19,17 +19,17 @@ class GameServer extends Actor with ActorLogging {
       games = games + (currentId -> game)
       currentId += 1
     case reg @ RegistrationRequest(gameId) => 
-      games.get(gameId)
-      	.map(_.forward(reg))
-      	.getOrElse(log.error("registration for unknown game : %d", gameId))
+      forwardToGameActor(gameId, reg, s"registration for unknown game : $gameId")
     case move @ GameMove(gameId, _, _) => 
-      games.get(gameId)
-      	.map(_.forward(move))
-      	.getOrElse(log.error("move for unknown game[%d]: %s", gameId, move))
+      forwardToGameActor(gameId, move, s"move for unknown game[$gameId]: $move")
     case status @ PlayerStatusRequest(gameId, _) => 
-      games.get(gameId)
-      	.map(_.forward(status))
-      	.getOrElse(log.error("status request for unknown game: %d", gameId))
+      forwardToGameActor(gameId, status, s"status request for unknown game: $gameId")
   }
+
+  private def forwardToGameActor(gameId: Int, message: Any, errorMsg: => String) =
+	  games.get(gameId)
+	  	.map(_.forward(message))
+	  	.getOrElse(log.error(errorMsg))
+    
   
 }

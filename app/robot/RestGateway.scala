@@ -1,6 +1,9 @@
 package robot
 
+import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+
 import akka.actor.ActorRef
 
 import play.api.libs.ws.WS
@@ -17,7 +20,7 @@ trait RestGateway {
 
 }
 
-class DefaultRestGateway(gameId: Int, playerId: String)(httpPort: Int = 9000) extends RestGateway
+class DefaultRestGateway(gameId: Int, playerId: String, httpPort: Int = 9000) extends RestGateway
     with Connect4Urls {
 
   private def fullUrl(context: String) = s"http://localhost:$httpPort$context"
@@ -36,7 +39,6 @@ class DefaultRestGateway(gameId: Int, playerId: String)(httpPort: Int = 9000) ex
   private def toTurnFeedBack(jsValue: JsValue): PlayerProtocol = {
     val isTurn = (jsValue \ "status" \ "ready").as[Boolean]
     val grid = (jsValue \ "status" \ "grid").as[Seq[String]]
-    println(grid)
     TurnFeedBack(isTurn, GameBoard.gridToGameBoard(grid))
   }
 
@@ -53,7 +55,17 @@ class DefaultRestGateway(gameId: Int, playerId: String)(httpPort: Int = 9000) ex
 
   private def toMoveFeedBack(jsValue: JsValue): PlayerProtocol = {
     val grid = (jsValue \ "result" \ "grid").as[Seq[String]]
-    MoveFeedBack(false, GameBoard.gridToGameBoard(grid))
+    val winningMove = (jsValue \ "result" \ "winningMove").as[Boolean]
+    MoveFeedBack(winningMove, GameBoard.gridToGameBoard(grid))
   }
 
+}
+
+object RestGateway extends Connect4Urls {
+  
+  def registerPlayer(port: Int, gameId: Int): String = {
+    val resp = WS.url(s"http://localhost:${port}${registerUrl(gameId.toString)}").post("")
+    (Await.result(resp, 5 seconds).json \ "registration" \ "playerId").as[String]
+  }
+  
 }

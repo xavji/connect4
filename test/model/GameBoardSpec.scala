@@ -1,10 +1,14 @@
 package model
 
+import org.junit.runner.RunWith
 import org.scalatest.WordSpec
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.matchers.MustMatchers
 
+@RunWith(classOf[JUnitRunner])
 class GameBoardSpec extends WordSpec
-    with MustMatchers {
+    with MustMatchers
+    with GameBoardFixture {
 
   import ColouredMove._
   
@@ -56,10 +60,7 @@ class GameBoardSpec extends WordSpec
   "isGameFull" should {
 
     "return true when it is (full)" in {
-      val moves =
-        (1 to 7) flatMap (n => Nil.padTo(6, red(n)))
-
-      GameBoard(moves.toList).isGameFull must be === true
+      fullBoard.isGameFull must be === true
     }
 
     "return false when it is not (full)" in {
@@ -78,6 +79,10 @@ class GameBoardSpec extends WordSpec
       GameBoard(moves.toList).isGameWon must be === true
     }
 
+    "return false when the board is full but no player wins" in {
+      fullBoard.isGameWon must be === false
+    }
+    
     "return false when the board has 4 pieces of the same colour in a row interspersed with another colour" in {
       val moves = List(red(7), yellow(6), red(5), yellow(4), red(3), yellow(2), red(1))
 

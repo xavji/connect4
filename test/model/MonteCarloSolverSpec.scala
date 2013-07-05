@@ -10,17 +10,17 @@ class MonteCarloSolverSpec extends WordSpec
     with MustMatchers {
 
   
-  import MonteCarloSolver.nextMove
+  val solver = new MonteCarloSolver()
   import ColouredMove._
   
   "A MonteCarloSolver" should {
 
     "return a RED move in column 3 if the board is empty" in {
-      nextMove(GameBoard()) must be === Some(red(3))
+      solver.nextMove(GameBoard()) must be === Some(red(3))
     }
     
     "return a YELLOW move in column 4 if the board has RED(1)" in {
-      nextMove(GameBoard(List(red(1)))) must be === Some(yellow(4))
+      solver.nextMove(GameBoard(List(red(1)))) must be === Some(yellow(4))
     }
     
   }

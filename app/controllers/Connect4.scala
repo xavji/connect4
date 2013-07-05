@@ -57,6 +57,7 @@ class Connect4(gameServer: ActorRef) extends Controller {
           val grid = BoardSerialiser.serialise(status.board)
           val json = s"""{ "status": { "grid": $grid, "ready": ${status.ready}, "winner": "${status.winner.getOrElse("")}" } }"""
           jsonResponse(json)
+        case r: InvalidRequest  => jsonResponse(invalidRequest)
       }
     }
   }

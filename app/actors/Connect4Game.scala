@@ -50,6 +50,9 @@ class Connect4Game extends Actor with FSM[GameState, GameBoard] {
       yellowPlayerId = uuid
       sender ! Registration(yellowPlayerId.get, YELLOW)
       goto(AwaitingMove)
+    case Event(req @ PlayerStatusRequest(gameId, playerId), board) if (isValidPlayerById(playerId)) =>
+      sender ! PlayerStatus(board.toLines, false)
+      stay
   }
   
   private def moveAndStatusHandler: GameEventHander = {

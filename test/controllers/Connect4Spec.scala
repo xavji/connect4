@@ -1,14 +1,18 @@
 package controllers
 
+import org.junit.runner.RunWith
+import org.scalatest.WordSpec
+import org.scalatest.junit.JUnitRunner
+import org.scalatest.matchers.MustMatchers
+
 import play.api.libs.json.Json
 import play.api.mvc.Result
 import play.api.test._
 import play.api.test.Helpers._
 
 import util.Connect4Urls
-import org.scalatest.WordSpec
-import org.scalatest.matchers.MustMatchers
 
+@RunWith(classOf[JUnitRunner])
 class Connect4Spec extends WordSpec
     with MustMatchers
     with AsyncResultMapper
@@ -56,6 +60,33 @@ class Connect4Spec extends WordSpec
     }
   }
 
+  "status GET shows RED has to wait for second player to join" in {
+    runTest { gameId =>
+      val red = register(gameId, "RED")
+
+      val redUrl = statusUrl(gameId, red)
+      val redStatus = routeAsync(FakeRequest(GET, redUrl))
+      contentTypeIsJson(redStatus)
+      contentAsString(redStatus) must be === """{ "status": { "grid": [".......", ".......", ".......", ".......", ".......", "......."], "ready": false, "winner": "" } }"""
+
+      val yellow = register(gameId, "YELLOW")
+      
+      val redStatus2 = routeAsync(FakeRequest(GET, redUrl))
+      contentTypeIsJson(redStatus2)
+      contentAsString(redStatus2) must be === """{ "status": { "grid": [".......", ".......", ".......", ".......", ".......", "......."], "ready": true, "winner": "" } }"""
+    }
+  }
+  
+  "status GET gives error json when the user id does not exist" in {
+    runTest { gameId =>
+      val unknowUserStatusUrl = statusUrl(gameId, "unknown_user_id")
+      
+      val unknowUserStatus = routeAsync(FakeRequest(GET, unknowUserStatusUrl))
+      
+      checkErrorResponse(unknowUserStatus)
+    }
+  }
+  
   "placepiece POST returns game status when it is a legal move" in {
     runTest { gameId =>
       val red = register(gameId, "RED")

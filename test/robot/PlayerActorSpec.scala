@@ -3,17 +3,20 @@ package robot
 import akka.actor.ActorSystem
 import akka.testkit.TestFSMRef
 import akka.testkit.TestKit
-
+import org.junit.runner.RunWith
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.WordSpec
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.matchers.MustMatchers
-
 import model._
+import java.util.concurrent.CountDownLatch
 
+@RunWith(classOf[JUnitRunner])
 class PlayerActorSpec extends TestKit(ActorSystem("testsystem"))
 	with WordSpec
     with MustMatchers
-    with MockFactory {
+    with MockFactory
+    with GameBoardFixture {
   
   import ColouredMove._
   
@@ -54,15 +57,15 @@ class PlayerActorSpec extends TestKit(ActorSystem("testsystem"))
 	player.stateName must be === WaitingForTurn
   }
   
-  "WaitingForTurnResponse x TurnFeedBack when NOT player's turn and game is over " +
-  "transitions to Done" in {
+  "WaitingForTurnResponse x TurnFeedBack when NOT player's turn and game is won " +
+  "transitions to Lost" in {
 	val (player, gateway, solver) = fixture
 	
 	player.setState(WaitingForTurnResponse)
 	
     player ! TurnFeedBack(false, gameWonBoard)
 
-	player.stateName must be === Done
+	player.stateName must be === Lost
 	player.stateData must be === gameWonBoard
   }
   
@@ -92,6 +95,18 @@ class PlayerActorSpec extends TestKit(ActorSystem("testsystem"))
 	player.stateData must be === board
   }
   
+  "WaitingForTurnResponse x TurnFeedBack when player's turn " + 
+  "but board is full transitions to Drawn" in {
+	val (player, gateway, solver) = fixture
+	
+	player.setState(WaitingForTurnResponse)
+	
+    player ! TurnFeedBack(true, fullBoard)
+
+	player.stateName must be === Drawn
+	player.stateData must be === fullBoard
+  }
+  
   "Playing x MoveFeedBackTimeOut transitions to WaitingForTurn" in {
 	val (player, gateway, solver) = fixture
 	
@@ -112,15 +127,26 @@ class PlayerActorSpec extends TestKit(ActorSystem("testsystem"))
 	player.stateName must be === Playing
   }
   
-  "Playing x MoveFeedBack when the game is won transitions to Done" in {
+  "Playing x MoveFeedBack when the game is won transitions to Won" in {
 	val (player, gateway, solver) = fixture
 	
 	player.setState(Playing)
 	
     player ! MoveFeedBack(true, gameWonBoard)
 
-	player.stateName must be === Done
+	player.stateName must be === Won
 	player.stateData must be === gameWonBoard
+  }
+  
+  "Playing x MoveFeedBack when the game is drawn transitions to Drawn" in {
+	val (player, gateway, solver) = fixture
+	
+	player.setState(Playing)
+	
+    player ! MoveFeedBack(false, fullBoard)
+
+	player.stateName must be === Drawn
+	player.stateData must be === fullBoard
   }
   
   "Playing x MoveFeedBack when the game is not won transitions to WaitingForTurn" in {
@@ -138,7 +164,7 @@ class PlayerActorSpec extends TestKit(ActorSystem("testsystem"))
   private def fixture: (TestFSMRef[PlayerState, GameBoard, PlayerActor], RestGateway, Solver) = {
     val gateway = mock[RestGateway]
     val solver = mock[Solver]
-    (TestFSMRef(new PlayerActor(gateway, solver)), gateway, solver)
+    (TestFSMRef(new PlayerActor(gateway, solver, new CountDownLatch(1))), gateway, solver)
   }
   
 }

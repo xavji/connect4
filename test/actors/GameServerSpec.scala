@@ -1,14 +1,19 @@
 package actors
 
-import org.scalatest.WordSpec
-import org.scalatest.matchers.MustMatchers
-
 import akka.actor.ActorSystem
 import akka.actor.Props
 import akka.testkit.ImplicitSender
 import akka.testkit.TestKit
+
+import org.junit.runner.RunWith
+
+import org.scalatest.WordSpec
+import org.scalatest.junit.JUnitRunner
+import org.scalatest.matchers.MustMatchers
+
 import model._
 
+@RunWith(classOf[JUnitRunner])
 class GameServerSpec extends TestKit(ActorSystem("GameServerSpecSystem"))
     with WordSpec
     with MustMatchers
@@ -114,33 +119,63 @@ class GameServerSpec extends TestKit(ActorSystem("GameServerSpecSystem"))
     expectMsg(PlayerStatus(List(".......", ".......", ".......", ".......", ".......", ".R....."), true))
   }
 
+  "PlayerStatusRequest when a game has not started yet, still waiting for the second player to join" in {
+    val (game, regRequest, redReg) = setUpRedGame
+
+    gameServer ! PlayerStatusRequest(game.id, redReg.playerId)
+    expectMsg(PlayerStatus(List(".......", ".......", ".......", ".......", ".......", "......."), false))
+
+    gameServer ! regRequest
+    val yellowReg = expectMsgClass(classOf[Registration])
+
+    gameServer ! PlayerStatusRequest(game.id, redReg.playerId)
+    expectMsg(PlayerStatus(List(".......", ".......", ".......", ".......", ".......", "......."), true))
+  }
+
+  "PlayerStatusRequest when a game has not started yet, waiting for the first player to join" in {
+    gameServer ! CreateGame
+    val game = expectMsgClass(classOf[Game])
+
+    val invalidReq = PlayerStatusRequest(game.id, "unknown id") 
+    gameServer ! invalidReq
+    
+    expectMsg(InvalidRequest(invalidReq))
+  }
+  
   "PlayerStatusRequest shows the winner when the game is won and no moves are accepted" in {
     val (gameId, redId, yellowId) = setUpNewGame()
 
     (1 to 3) foreach { n =>
-	    gameServer ! GameMove(gameId, redId, 2)
-	    gameServer ! GameMove(gameId, yellowId, 3)
+      gameServer ! GameMove(gameId, redId, 2)
+      gameServer ! GameMove(gameId, yellowId, 3)
     }
     receiveWhile() {
       case mv: MoveStatus =>
     }
-    
+
     val finalBoard = List(".......", ".......", ".R.....", ".RY....", ".RY....", ".RY....")
     gameServer ! GameMove(gameId, redId, 2)
     expectMsg(MoveStatus(finalBoard, true))
-    
+
     gameServer ! PlayerStatusRequest(gameId, yellowId)
     expectMsg(PlayerStatus(finalBoard, false, Some(RED)))
-    
+
     gameServer ! PlayerStatusRequest(gameId, redId)
     expectMsg(PlayerStatus(finalBoard, false, Some(RED)))
-    
-    
+
     gameServer ! GameMove(gameId, yellowId, 3)
     expectMsg(InvalidRequest(GameMove(gameId, yellowId, 3)))
   }
-  
+
   private def setUpNewGame() = {
+    val (game, regRequest, redReg) = setUpRedGame
+
+    gameServer ! regRequest
+    val yellowReg = expectMsgClass(classOf[Registration])
+    (game.id, redReg.playerId, yellowReg.playerId)
+  }
+
+  private def setUpRedGame: (model.Game, model.RegistrationRequest, model.Registration) = {
     gameServer ! CreateGame
     val game = expectMsgClass(classOf[Game])
 
@@ -148,10 +183,8 @@ class GameServerSpec extends TestKit(ActorSystem("GameServerSpecSystem"))
 
     gameServer ! regRequest
     val redReg = expectMsgClass(classOf[Registration])
-
-    gameServer ! regRequest
-    val yellowReg = expectMsgClass(classOf[Registration])
-    (game.id, redReg.playerId, yellowReg.playerId)
+    
+    (game, regRequest, redReg)
   }
 
 }

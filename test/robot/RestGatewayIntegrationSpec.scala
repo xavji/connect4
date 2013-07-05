@@ -1,30 +1,26 @@
 package robot
 
-import scala.concurrent.Await
-import scala.concurrent.duration._
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-
-import play.api.libs.ws.Response
-import play.api.libs.ws.WS
-import play.api.test._
-import play.api.test.Helpers._
-
 import org.junit.runner.RunWith
 import org.scalatest.WordSpec
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.matchers.MustMatchers
-
+import play.api.libs.ws.WS
+import play.api.test._
+import play.api.test.Helpers._
 import actors.StopSystemAfterAll
 import model._
-import ColouredMove._
+import model.ColouredMove._
+import util.Connect4Urls
+import scala.collection.mutable.ListBuffer
 
 @RunWith(classOf[JUnitRunner])
 class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSystem"))
     with WordSpec
     with MustMatchers
-    with StopSystemAfterAll {
+    with StopSystemAfterAll
+    with Connect4Urls {
 
   val port = 3333
   val GameId = """\{ "game": \{ "id": (\d+) \} \}""".r
@@ -94,29 +90,53 @@ class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSys
       }
     }
     
+    "winning move gives correct MoveFeedBack and then pollForTurn says nobody can play" in {
+      running(TestServer(port), HTMLUNIT) { browser =>
+        val (redRest, yellowRest) = buildRedAndYellowGateways(browser)
+        
+        val buffer = ListBuffer[ColouredMove]()
+        (1 to 3) foreach {
+          i =>
+	        redRest.play(4, testActor)
+	        buffer.prepend(red(4))
+	        expectMsg(MoveFeedBack(false, GameBoard(buffer.toList)))
+	        yellowRest.play(2, testActor)
+	        buffer.prepend(yellow(2))
+	        expectMsg(MoveFeedBack(false, GameBoard(buffer.toList)))
+        }
+        
+        redRest.play(4, testActor)
+	    buffer.prepend(red(4))
+        
+        val finalGameBoard = GameBoard(buffer.toList)
+	    expectMsg(MoveFeedBack(true, finalGameBoard))
+        
+        redRest.pollForTurn(testActor)
+        expectMsg(TurnFeedBack(false, finalGameBoard))
+        
+        yellowRest.pollForTurn(testActor)
+        expectMsg(TurnFeedBack(false, finalGameBoard))
+      }
+    }
+    
   }
 
   private def buildRedAndYellowGateways(browser: TestBrowser) = {
     val gameId = createGame(browser)
-    val red = registerPlayer(gameId)
-    val yellow = registerPlayer(gameId)
+    val red = RestGateway.registerPlayer(port, gameId)
+    val yellow = RestGateway.registerPlayer(port, gameId)
     (buildRestGateway(gameId, red), buildRestGateway(gameId, yellow))
   }
 
   private def createGame(browser: TestBrowser): Int = {
-    browser.goTo(s"http://localhost:$port/connect4/game/create")
+    browser.goTo(s"http://localhost:${port}${createGameUrl}")
     browser.pageSource match {
       case GameId(id) => id.toInt
       case _          => fail("createGame did not return a game id")
     }
   }
 
-  private def registerPlayer(gameId: Int): String = {
-    val resp = WS.url(s"http://localhost:$port/connect4/game/$gameId/register").post("")
-    (Await.result(resp, 5 seconds).asInstanceOf[Response].json \ "registration" \ "playerId").as[String]
-  }
-
   private def buildRestGateway(gameId: Int, playerId: String) =
-    new DefaultRestGateway(gameId, playerId)(port)
+    new DefaultRestGateway(gameId, playerId, port)
 
 }
