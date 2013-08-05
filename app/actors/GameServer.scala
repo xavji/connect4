@@ -1,35 +1,44 @@
 package actors
 
-import akka.actor.Actor
-import akka.actor.ActorLogging
-import akka.actor.ActorRef
-import akka.actor.Props
+import scala.collection.mutable.ListBuffer
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
+import akka.actor._
+import akka.pattern.{ask, pipe}
+import akka.util.Timeout
 import model._
 
 class GameServer extends Actor with ActorLogging {
 
-  var games: Map[Int, ActorRef] = Map()
-  var currentId = 1
+  val games = ListBuffer[ActorRef]()
+  
+  implicit val timeOut = Timeout(10 seconds)
   
   def receive = {
     case CreateGame => 
-      val game = context.actorOf(Props[Connect4Game])
+      val currentId = games.size
+      val game = context.actorOf(Props(new Connect4Game(currentId)))
       sender ! Game(currentId)
-      games = games + (currentId -> game)
-      currentId += 1
-    case reg @ RegistrationRequest(gameId) => 
-      forwardToGameActor(gameId, reg, s"registration for unknown game : $gameId")
+      games += game
+    case reg @ RegistrationRequest(gameId, _) => 
+      forwardToGameActor(gameId, reg, s"registration for unknown game: $gameId")
     case move @ GameMove(gameId, _, _) => 
       forwardToGameActor(gameId, move, s"move for unknown game[$gameId]: $move")
     case status @ PlayerStatusRequest(gameId, _) => 
       forwardToGameActor(gameId, status, s"status request for unknown game: $gameId")
+    case ListGames =>
+      val statuses = games map {
+        actor => (actor ? GameStatusRequest).mapTo[GameStatus]
+      }
+      Future.sequence(statuses) map (ss => ListGamesResponse(ss.toList)) pipeTo sender
   }
 
   private def forwardToGameActor(gameId: Int, message: Any, errorMsg: => String) =
-	  games.get(gameId)
-	  	.map(_.forward(message))
-	  	.getOrElse(log.error(errorMsg))
+    if (games.isDefinedAt(gameId))
+      games(gameId).forward(message)
+    else
+	  log.error(errorMsg)
     
-  
 }

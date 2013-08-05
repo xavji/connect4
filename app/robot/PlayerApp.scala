@@ -21,7 +21,7 @@ object PlayerApp extends App {
 
   implicit val actorSystem = ActorSystem("connect4-robot")
 
-  val player = actorSystem.actorOf(Props(new PlayerActor(new DefaultRestGateway(gameId, playerId), new MonteCarloSolver(playouts, searchDepth), latch)), "player")
+  val player = actorSystem.actorOf(Props(new PollingPlayerActor(new DefaultRestGateway(gameId, playerId), new MonteCarloSolver(playouts, searchDepth), latch)), "player")
 
   import scala.concurrent.ExecutionContext.Implicits.global
 

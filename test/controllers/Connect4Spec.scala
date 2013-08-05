@@ -5,26 +5,27 @@ import org.scalatest.WordSpec
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.matchers.MustMatchers
 
-import play.api.libs.json.Json
+import play.api.libs.json._
 import play.api.mvc.Result
 import play.api.test._
 import play.api.test.Helpers._
 
-import util.Connect4Urls
+import model._
+import _root_.util.Connect4Urls
 
 @RunWith(classOf[JUnitRunner])
 class Connect4Spec extends WordSpec
     with MustMatchers
     with AsyncResultMapper
     with Connect4Urls {
-
-  val GameId = """\{ "game": \{ "id": (\d+) \} \}""".r
+  
+  import GameJsonRead.gameId
 
   "createGame GET returns a game JSON" in {
     running(FakeApplication()) {
       val resp = routeAsync(FakeRequest(GET, createGameUrl))
       contentTypeIsJson(resp)
-      contentAsString(resp) must be === """{ "game": { "id": 1 } }"""
+      contentAsString(resp) must be === """{"game":{"id":0}}"""
     }
   }
 
@@ -35,6 +36,13 @@ class Connect4Spec extends WordSpec
     }
   }
 
+  "register accepts an optional ws parameter" in {
+    runTest { gameId =>
+      register(gameId, "RED")
+      register(gameId, "YELLOW", true)
+    }
+  }
+  
   "register POST returns an error status when a game is full" in {
     runTest { gameId =>
       register(gameId, "RED")
@@ -51,12 +59,13 @@ class Connect4Spec extends WordSpec
 
       val redUrl = statusUrl(gameId, red)
       val redStatus = routeAsync(FakeRequest(GET, redUrl))
-      contentTypeIsJson(redStatus)
-      contentAsString(redStatus) must be === """{ "status": { "grid": [".......", ".......", ".......", ".......", ".......", "......."], "ready": true, "winner": "" } }"""
-
+      
+      extract[PlayerStatus](redStatus) must be === PlayerStatus(GameBoard.empty, true)
+      
       val yellowUrl = statusUrl(gameId, yellow)
       val yellowStatus = routeAsync(FakeRequest(GET, yellowUrl))
-      contentAsString(yellowStatus) must be === """{ "status": { "grid": [".......", ".......", ".......", ".......", ".......", "......."], "ready": false, "winner": "" } }"""
+      
+      extract[PlayerStatus](yellowStatus) must be === PlayerStatus(GameBoard.empty, false)
     }
   }
 
@@ -65,15 +74,14 @@ class Connect4Spec extends WordSpec
       val red = register(gameId, "RED")
 
       val redUrl = statusUrl(gameId, red)
+      
       val redStatus = routeAsync(FakeRequest(GET, redUrl))
-      contentTypeIsJson(redStatus)
-      contentAsString(redStatus) must be === """{ "status": { "grid": [".......", ".......", ".......", ".......", ".......", "......."], "ready": false, "winner": "" } }"""
-
+      extract[PlayerStatus](redStatus) must be === PlayerStatus(GameBoard.empty, false)
+      
       val yellow = register(gameId, "YELLOW")
       
       val redStatus2 = routeAsync(FakeRequest(GET, redUrl))
-      contentTypeIsJson(redStatus2)
-      contentAsString(redStatus2) must be === """{ "status": { "grid": [".......", ".......", ".......", ".......", ".......", "......."], "ready": true, "winner": "" } }"""
+      extract[PlayerStatus](redStatus2) must be === PlayerStatus(GameBoard.empty, true)
     }
   }
   
@@ -91,15 +99,15 @@ class Connect4Spec extends WordSpec
     runTest { gameId =>
       val red = register(gameId, "RED")
       val yellow = register(gameId, "YELLOW")
-
+      val expectedBoardAfterMove = GameBoard(List(ColouredMove.red(3))).toLines
+      
       val redMoveUrl = moveUrl(gameId, red, 3)
-      val moveStatus = routeAsync(FakeRequest(POST, redMoveUrl))
-      contentTypeIsJson(moveStatus)
-      contentAsString(moveStatus) must be === """{ "result": { "grid": [".......", ".......", ".......", ".......", ".......", "..R...."], "winningMove": false } }"""
-        
+      val redMove = routeAsync(FakeRequest(POST, redMoveUrl))
+      extract[MoveStatus](redMove) must be === MoveStatus(expectedBoardAfterMove, false)
+      
       val yellowUrl = statusUrl(gameId, yellow)
       val yellowStatus = routeAsync(FakeRequest(GET, yellowUrl))
-      contentAsString(yellowStatus) must be === """{ "status": { "grid": [".......", ".......", ".......", ".......", ".......", "..R...."], "ready": true, "winner": "" } }"""
+      extract[PlayerStatus](yellowStatus) must be === PlayerStatus(expectedBoardAfterMove, true)
     }
   }
 
@@ -110,6 +118,7 @@ class Connect4Spec extends WordSpec
 
       val yellowMoveUrl = moveUrl(gameId, yellow, 3)
       val moveStatus = routeAsync(FakeRequest(POST, yellowMoveUrl))
+      
       checkErrorResponse(moveStatus)
     }
   }
@@ -118,19 +127,28 @@ class Connect4Spec extends WordSpec
     contentType(res) must be === Some("application/json")
   }
 
-  private def register(id: String, expectedColour: String) = {
-    val resp = registerRequest(id)
-    contentTypeIsJson(resp)
-    verifyRegistration(contentAsString(resp), expectedColour)
+  private def extract[T : Reads](result: Result): T = {
+    contentTypeIsJson(result)
+    val json = Json.parse(contentAsString(result))
+    json.as[T]
   }
 
-  private def registerRequest(gameId: String) =
-    routeAsync(FakeRequest(POST, registerUrl(gameId)))
+  private def register(id: String, expectedColour: String, withWS: Boolean = false) = {
+    val resp = registerRequest(id, withWS)
+    contentTypeIsJson(resp)
+    verifyRegistration(contentAsString(resp), expectedColour, withWS)
+  }
 
-  private def verifyRegistration(resp: String, colour: String) = {
+  private def registerRequest(gameId: String, withWS: Boolean = false) =
+    routeAsync(FakeRequest(POST, registerUrl(gameId, withWS)))
+
+  private def verifyRegistration(resp: String, colour: String, withWS: Boolean = false) = {
     val reg = Json.parse(resp)
     val col = (reg \ "registration" \ "colour").as[String]
     col must be === colour
+    
+    if (withWS)
+      (reg \ "registration" \ "ws").asOpt[Boolean] must be === Some(true)
 
     val playerId = (reg \ "registration" \ "playerId").asOpt[String]
     playerId.isDefined must be === true
@@ -141,16 +159,19 @@ class Connect4Spec extends WordSpec
     running(FakeApplication()) {
       val gameResp = routeAsync(FakeRequest(GET, createGameUrl))
       contentTypeIsJson(gameResp)
-      contentAsString(gameResp) match {
-        case GameId(id) => test(id)
-        case _          => fail("createGame did not return a game id")
-      }
+      val gId = gameId(contentAsString(gameResp))
+      test(gId.toString)
     }
   }
 
   private def checkErrorResponse(resp: Result) {
     contentTypeIsJson(resp)
-    contentAsString(resp) must be === """{ "error": "invalid request" }"""
+    val js = Json.parse(contentAsString(resp)) 
+    js must be === Json.obj("error" -> "invalid request")
   }
 
 }
+
+object GameJsonRead {
+  def gameId(s: String) = (Json.parse(s) \ "game" \ "id").as[Int]
+} 

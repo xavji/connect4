@@ -1,50 +1,45 @@
 package controllers
 
 import scala.concurrent.duration._
-
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-
 import play.api._
 import play.api.libs.concurrent.Execution.Implicits._
 import play.api.libs.json.JsObject
 import play.api.libs.json.JsString
 import play.api.mvc._
-
 import model._
+import play.api.libs.json.Json
+import play.api.libs.json.Writes
 
 class Connect4(gameServer: ActorRef) extends Controller {
 
   implicit val timeOut = Timeout(10 seconds)
 
-  val invalidRequest = """{ "error": "invalid request" }"""
+  val invalidRequest = Ok("""{ "error": "invalid request" }""").as(JSON)
     
   def ping = Action {
-    Ok(JsObject(Seq("application" -> JsString("connect4"))))
+    Ok(Json.obj("application" -> "connect4"))
   }
 
   def createGame = Action {
     val game = gameServer ? CreateGame
     Async {
       game map {
-        case Game(id) =>
-          val json = s"""{ "game": { "id": ${id} } }"""
-          jsonResponse(json)
+        case g: Game => jsonResponse(g)
       }
     }
   }
 
-  private def jsonResponse(s: String) = Ok(s).as(JSON)
+  private def jsonResponse[T : Writes](t: T) = Ok(Json.toJson(t))
 
-  def register(gameId: Int) = Action {
-    val regResp = gameServer ? RegistrationRequest(gameId)
+  def register(gameId: Int, ws: Boolean = false) = Action {
+    val regResp = gameServer ? RegistrationRequest(gameId, ws)
     Async {
       regResp map {
-        case reg: Registration =>
-          val json = s"""{ "registration": { "playerId": "${reg.playerId}", "colour": "${reg.colour}" } }"""
-          jsonResponse(json)
-        case r: InvalidRequest  => jsonResponse(invalidRequest)
+        case reg: Registration => jsonResponse(reg)
+        case r: InvalidRequest => invalidRequest
       }
     }
   }
@@ -53,11 +48,8 @@ class Connect4(gameServer: ActorRef) extends Controller {
     val statusResp = gameServer ? PlayerStatusRequest(gameId, playerId)
     Async {
       statusResp map {
-        case status: PlayerStatus =>
-          val grid = BoardSerialiser.serialise(status.board)
-          val json = s"""{ "status": { "grid": $grid, "ready": ${status.ready}, "winner": "${status.winner.getOrElse("")}" } }"""
-          jsonResponse(json)
-        case r: InvalidRequest  => jsonResponse(invalidRequest)
+        case status: PlayerStatus => jsonResponse(status)
+        case r: InvalidRequest    => invalidRequest
       }
     }
   }
@@ -66,11 +58,8 @@ class Connect4(gameServer: ActorRef) extends Controller {
     val moveResp = gameServer ? GameMove(gameId, playerId, column)
     Async {
       moveResp map {
-        case status: MoveStatus =>
-          val grid = BoardSerialiser.serialise(status.board)
-          val json = s"""{ "result": { "grid": $grid, "winningMove": ${status.winning} } }"""
-          jsonResponse(json)
-        case r: InvalidRequest  => jsonResponse(invalidRequest)
+        case status: MoveStatus => jsonResponse(status)
+        case r: InvalidRequest  => invalidRequest
       }
     }
   }

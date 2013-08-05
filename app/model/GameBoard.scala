@@ -81,6 +81,10 @@ object GameBoard {
     val moves = grid.toList.map(row => row.toList).flatMap(chars => chars.zipWithIndex.collect(charToColouredMove))
     GameBoard(moves)
   }
+  
+  private val emptyLine = new String(Seq.fill(Dims.COLS)('.').toArray) 
+  
+  val empty: Seq[String] = Seq.fill(Dims.LINES)(emptyLine)
 
 }
 

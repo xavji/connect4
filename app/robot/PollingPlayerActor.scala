@@ -4,7 +4,7 @@ import akka.actor._
 import model._
 import java.util.concurrent.CountDownLatch
 
-class PlayerActor(restGateway: RestGateway, solver: Solver, latch: CountDownLatch) extends Actor with LoggingFSM[PlayerState, GameBoard] {
+class PollingPlayerActor(restGateway: RestGateway, solver: Solver, latch: CountDownLatch) extends Actor with LoggingFSM[PlayerState, GameBoard] {
 
   type PlayerEventHander = PartialFunction[Event, FSM.State[PlayerState, GameBoard]]
   

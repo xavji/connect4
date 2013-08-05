@@ -23,10 +23,8 @@ trait RestGateway {
 class DefaultRestGateway(gameId: Int, playerId: String, httpPort: Int = 9000) extends RestGateway
     with Connect4Urls {
 
-  private def fullUrl(context: String) = s"http://localhost:$httpPort$context"
-
   def pollForTurn(actor: ActorRef): Unit = {
-    val url = fullUrl(statusUrl(gameId.toString, playerId))
+    val url = fullUrl(statusUrl(gameId.toString, playerId), httpPort)
     val resp = WS.url(url).get
     resp.onComplete {
       tryResp =>
@@ -37,13 +35,12 @@ class DefaultRestGateway(gameId: Int, playerId: String, httpPort: Int = 9000) ex
   }
 
   private def toTurnFeedBack(jsValue: JsValue): PlayerProtocol = {
-    val isTurn = (jsValue \ "status" \ "ready").as[Boolean]
-    val grid = (jsValue \ "status" \ "grid").as[Seq[String]]
-    TurnFeedBack(isTurn, GameBoard.gridToGameBoard(grid))
+    val status = jsValue.as[PlayerStatus]
+    TurnFeedBack(status.ready, GameBoard.gridToGameBoard(status.board))
   }
 
   def play(column: Int, actor: ActorRef): Unit = {
-    val url = fullUrl(moveUrl(gameId.toString, playerId, column))
+    val url = fullUrl(moveUrl(gameId.toString, playerId, column), httpPort)
     val resp = WS.url(url).post("")
     resp.onComplete {
       tryResp =>
@@ -54,9 +51,8 @@ class DefaultRestGateway(gameId: Int, playerId: String, httpPort: Int = 9000) ex
   }
 
   private def toMoveFeedBack(jsValue: JsValue): PlayerProtocol = {
-    val grid = (jsValue \ "result" \ "grid").as[Seq[String]]
-    val winningMove = (jsValue \ "result" \ "winningMove").as[Boolean]
-    MoveFeedBack(winningMove, GameBoard.gridToGameBoard(grid))
+    val moveStatus = jsValue.as[MoveStatus]
+    MoveFeedBack(moveStatus.winning, GameBoard.gridToGameBoard(moveStatus.board))
   }
 
 }
@@ -64,7 +60,8 @@ class DefaultRestGateway(gameId: Int, playerId: String, httpPort: Int = 9000) ex
 object RestGateway extends Connect4Urls {
   
   def registerPlayer(port: Int, gameId: Int): String = {
-    val resp = WS.url(s"http://localhost:${port}${registerUrl(gameId.toString)}").post("")
+    val regUrl = s"http://localhost:${port}${registerUrl(gameId.toString)}"
+    val resp = WS.url(regUrl).post("")
     (Await.result(resp, 5 seconds).json \ "registration" \ "playerId").as[String]
   }
   

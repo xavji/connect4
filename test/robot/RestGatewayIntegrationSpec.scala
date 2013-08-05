@@ -1,19 +1,23 @@
 package robot
 
+import scala.collection.mutable.ListBuffer
+
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+
 import org.junit.runner.RunWith
 import org.scalatest.WordSpec
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.matchers.MustMatchers
-import play.api.libs.ws.WS
+
 import play.api.test._
 import play.api.test.Helpers._
+
 import actors.StopSystemAfterAll
+import controllers.GameJsonRead
 import model._
 import model.ColouredMove._
 import util.Connect4Urls
-import scala.collection.mutable.ListBuffer
 
 @RunWith(classOf[JUnitRunner])
 class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSystem"))
@@ -23,7 +27,6 @@ class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSys
     with Connect4Urls {
 
   val port = 3333
-  val GameId = """\{ "game": \{ "id": (\d+) \} \}""".r
 
   "A RestGateway" should {
 
@@ -40,7 +43,7 @@ class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSys
       }
     }
 
-    "red plays at the start of the game" in {
+    "say red plays at the start of the game" in {
       running(TestServer(port), HTMLUNIT) { browser =>
         val (redRest, yellowRest) = buildRedAndYellowGateways(browser)
 
@@ -49,7 +52,7 @@ class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSys
       }
     }
     
-    "yellow plays after red" in {
+    "say yellow plays after red" in {
       running(TestServer(port), HTMLUNIT) { browser =>
         val (redRest, yellowRest) = buildRedAndYellowGateways(browser)
 
@@ -61,7 +64,7 @@ class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSys
       }
     }
     
-    "yellow plays when it is not his turn" in {
+    "say yellow plays when it is not his turn" in {
       running(TestServer(port), HTMLUNIT) { browser =>
         val (redRest, yellowRest) = buildRedAndYellowGateways(browser)
 
@@ -90,7 +93,7 @@ class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSys
       }
     }
     
-    "winning move gives correct MoveFeedBack and then pollForTurn says nobody can play" in {
+    "say winning move gives correct MoveFeedBack and then pollForTurn says nobody can play" in {
       running(TestServer(port), HTMLUNIT) { browser =>
         val (redRest, yellowRest) = buildRedAndYellowGateways(browser)
         
@@ -130,10 +133,7 @@ class RestGatewayIntegrationSpec extends TestKit(ActorSystem("RestGatewaySpecSys
 
   private def createGame(browser: TestBrowser): Int = {
     browser.goTo(s"http://localhost:${port}${createGameUrl}")
-    browser.pageSource match {
-      case GameId(id) => id.toInt
-      case _          => fail("createGame did not return a game id")
-    }
+    GameJsonRead.gameId(browser.pageSource)
   }
 
   private def buildRestGateway(gameId: Int, playerId: String) =

@@ -12,8 +12,10 @@ GET    /connect4/ping                                               @controllers
 
 GET    /connect4/game/create                                        @controllers.Connect4.createGame
 
-POST   /connect4/game/:gameId/register                              @controllers.Connect4.register(gameId: Int)
+POST   /connect4/game/:gameId/register                              @controllers.Connect4.register(gameId: Int, ws: Boolean ?= false)
 
 GET    /connect4/game/:gameId/player/:playerId/status               @controllers.Connect4.status(gameId: Int, playerId: String)
 
 POST   /connect4/game/:gameId/player/:playerId/placepiece/:column   @controllers.Connect4.move(gameId: Int, playerId: String, column: Int)
+
+GET    /connect4/socket/index                                       @controllers.Connect4Socket.index
